@@ -26,48 +26,57 @@ description: Общие принципы работы над задачей, п�
 
 ## Выполнение задачи
 
-Выполнение задачи начинается с однократного запуска скила tosir-overview, результатом которого является создание файла overview.md в папке задачи.
-Далее последовательно выполняются скилы:
-- tosir-plannextstage - результа появления очередного stage-NN.md, например stage-01.md
-- tosir-implementstage - работа агента по выполнению этапа stage-NN.md
+Выполнение задачи начинается с однократного запуска скилла tosir-overview, результатом которого является создание overview.md и log.md в папке задачи.
+Далее последовательно выполняются скиллы:
+- tosir-plannextstage - подготовка очередного этапа stage-NN.md, например stage-01.md;
+- tosir-implementstage - выполнение этапа stage-NN.md или плана доработок stage-NN-M.md;
 - tosir-reviewstage - проверка результата tosir-implementstage с одним из итогов:
   - принято - переходим к началу данной последовательности;
   - нужны исправления - ревьюер обязательно создаёт stage-NN-M.md, далее tosir-implementstage над ним;
   - заблокировано - ждём решения пользователя.
 
-Когда все блоки overview.md приняты, tosir-plannextstage фиксирует ALL_STAGES_ACCEPTED,
-а tosir-reviewstage выполняет итоговую приёмку задачи.
+Когда все блоки overview.md приняты, tosir-plannextstage фиксирует ALL_STAGES_ACCEPTED и останавливается,
+а итоговую приёмку задачи выполняет tosir-review.
 
 Результат принятого этапа должен быть закоммичен до начала реализации следующего этапа.
 Коммит выполняет пользователь или агент с его явного разрешения.
+
+Файлы папки задачи (планы, log.md) не считаются изменениями реализации:
+они не мешают началу этапа и не проверяются ревью как часть кода.
 
 ## log.md
 
 Планы описывают согласованные задания и не являются источником текущего статуса.
 Актуальное состояние определяется по log.md.
 
-Каждый агент, начиная работу, читает log.md, а завершив или прервав работу — добавляет одну строку в конец:
+Каждый агент, начиная работу, читает log.md, а по её результату добавляет одну строку в конец:
 
 ```
 <дата время> | <навык> | <модель агента> | <статус> | stage=<stage-NN> | plan=<файл> | <детали ключ=значение>
 ```
 
 - Существующие строки не изменяются и не удаляются; исправления — только новой записью CORRECTION или USER_DECISION.
-- stage всегда указывает основной этап, plan — конкретный файл плана (например stage-01-2.md).
+- stage всегда указывает основной этап, plan — конкретный файл плана (например stage-01-2.md). Если значения нет — `-`.
+- Модель агента — идентификатор модели; если неизвестна — `unknown`.
+- Несколько репозиториев в base перечисляются через запятую: `base=web:a1b2c3d,sub:c3d4e5f`.
+- Поля со свободным текстом (reason, need, gaps, text) пишутся последними и не содержат `|`.
+- Если не выполнены условия запуска навыка (неподходящая последняя запись, грязное рабочее дерево, нет нужных файлов),
+  в log.md ничего не пиши — только сообщи пользователю.
 
 | Статус | Кто пишет | Детали |
 |---|---|---|
 | OVERVIEW_CREATED | overview | — |
 | STAGE_PLANNED | plannextstage | — |
-| IMPL_STARTED | implement, только для основного этапа | base=HEAD каждого затрагиваемого репозитория и подмодуля, branch |
+| IMPL_STARTED | implement | для первого запуска основного этапа — base=HEAD каждого затрагиваемого репозитория и подмодуля, branch |
 | IMPL_DONE | implement | changed=файлы, checks=passed/failed/partial |
-| IMPL_STOPPED | implement | reason |
-| REVIEW_ACCEPTED | review | — |
-| REVIEW_REWORK | review | next=stage-NN-M.md |
-| REVIEW_BLOCKED | review | reason, need |
+| IMPL_STOPPED | implement, только после IMPL_STARTED | reason |
+| REVIEW_ACCEPTED | reviewstage | — |
+| REVIEW_REWORK | reviewstage | next=stage-NN-M.md |
+| REVIEW_BLOCKED | reviewstage, review | reason, need |
 | ALL_STAGES_ACCEPTED | plannextstage | — |
 | TASK_DONE / TASK_GAPS | review | gaps (для TASK_GAPS) |
-| USER_DECISION / CORRECTION | пользователь или агент по его указанию | ref, text |
+| USER_DECISION | пользователь или агент по его указанию | next=навык, plan (если нужен), text |
+| CORRECTION | пользователь или агент по его указанию | ref=дата исправляемой записи, text |
 
 Пример:
 
@@ -75,18 +84,21 @@ description: Общие принципы работы над задачей, п�
 2026-11-08 11:00 | tosir-implementstage | anthropic/claude-opus-5-5 | IMPL_STARTED | stage=stage-01 | plan=stage-01.md | base=web:a1b2c3d branch=main
 ```
 
-Следующий шаг определяется по последней записи:
+Следующий шаг определяется по последней записи, не считая CORRECTION
+(CORRECTION учитывается как уточнение записи, на которую ссылается):
 
 | Последняя запись | Следующий шаг |
 |---|---|
 | OVERVIEW_CREATED, REVIEW_ACCEPTED, TASK_GAPS | tosir-plannextstage |
 | STAGE_PLANNED, REVIEW_REWORK | tosir-implementstage |
 | IMPL_DONE | tosir-reviewstage |
-| ALL_STAGES_ACCEPTED | tosir-reviewstage, итоговая приёмка |
+| ALL_STAGES_ACCEPTED | tosir-review |
 | IMPL_STARTED, IMPL_STOPPED, REVIEW_BLOCKED | решение пользователя (USER_DECISION) |
+| USER_DECISION | навык из её next |
 | TASK_DONE | никаких действий, задача завершена |
 
-После USER_DECISION следующий шаг определяется её текстом.
+Изменение overview.md или существующих планов после REVIEW_BLOCKED выполняет пользователь
+или агент с его явного разрешения; результат фиксируется в USER_DECISION.
 
 Остановись и запроси уточнение, если:
 - запрошенная операция не соответствует таблице;
