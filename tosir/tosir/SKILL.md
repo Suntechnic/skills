@@ -53,7 +53,7 @@ description: Общие принципы работы над задачей, п�
 | Статус | Кто пишет | Детали |
 |---|---|---|
 | OVERVIEW_CREATED | overview | — |
-| STAGE_PLANNED | plannextstage | — |
+| STAGE_PLANNED | plannextstage | closes=ID пробелов (для этапа по TASK_GAPS) |
 | IMPL_STARTED | implement | для первого запуска основного этапа — base=HEAD каждого затрагиваемого репозитория и подмодуля, branch |
 | IMPL_DONE | implement | changed=файлы, checks=passed/failed/partial |
 | IMPL_STOPPED | implement, только после IMPL_STARTED | reason |
@@ -62,7 +62,7 @@ description: Общие принципы работы над задачей, п�
 | REVIEW_BLOCKED | reviewstage, review | reason, need |
 | ALL_STAGES_ACCEPTED | plannextstage | — |
 | TASK_DONE / TASK_GAPS | review | gaps (для TASK_GAPS) |
-| USER_DECISION | пользователь или агент по его указанию | next=навык, plan (если нужен), text |
+| USER_DECISION | пользователь или агент по его указанию | next=навык, plan (если нужен), closes (если пробел снимается без этапа), text |
 | CORRECTION | пользователь или агент по его указанию | ref=дата исправляемой записи, text |
 
 Пример:
@@ -71,7 +71,9 @@ description: Общие принципы работы над задачей, п�
 2026-11-08 11:00 | tosir-implementstage | anthropic/claude-opus-5-5 | IMPL_STARTED | stage=stage-01 | plan=stage-01.md | base=web:a1b2c3d branch=main
 ```
 
-Следующий шаг определяется по последней записи. CORRECTION не меняет шаг: она уточняет запись, на которую ссылается.
+Следующий шаг определяется по последней значимой записи — последней строке log.md, не считая записей CORRECTION. Везде в навыках «последняя запись» означает именно её.
+
+CORRECTION не участвует в переходах. Она уточняет детали записи из ref (например, plan, base, changed), и при чтении той записи учитываются её исправления. Статус и следующий шаг CORRECTION не меняет; для этого нужна USER_DECISION.
 
 | Последняя запись | Следующий шаг |
 |---|---|
@@ -82,6 +84,13 @@ description: Общие принципы работы над задачей, п�
 | IMPL_STARTED, IMPL_STOPPED, REVIEW_BLOCKED | решение пользователя (USER_DECISION) |
 | USER_DECISION | навык из её next |
 | TASK_DONE | никаких действий, задача завершена |
+
+## Пробелы итоговой приёмки
+
+- В TASK_GAPS каждый пробел получает ID: `gaps=G1: текст; G2: текст`. Нумерация сквозная для всей задачи, ID не переиспользуются.
+- Открытые пробелы — пробелы из последней TASK_GAPS, кроме закрытых.
+- Пробел закрыт, если после этой TASK_GAPS есть REVIEW_ACCEPTED этапа, в STAGE_PLANNED которого он указан в `closes=G1,G2`, либо USER_DECISION с `closes=` для этого ID.
+- Новая TASK_GAPS заменяет прежний набор: пробелы, которые остались, перечисляются в ней заново под новыми ID.
 
 Изменение overview.md или существующих планов после REVIEW_BLOCKED выполняет пользователь или агент с его явного разрешения; результат фиксируется в USER_DECISION.
 
