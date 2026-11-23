@@ -37,9 +37,9 @@ description: Управляет автоматизированным цикло�
 |---|---|
 | tosir-overview | planner, architect |
 | tosir-plannextstage | planner, architect |
-| tosir-implementstage | builder, implementer, developer |
-| tosir-reviewstage | reviewer, tester |
-| tosir-review | reviewer, tester |
+| tosir-implementstage | builder, maker, implementer, developer |
+| tosir-reviewstage | reviewer, checker, tester |
+| tosir-review | reviewer, checker, tester |
 
 Каждому исполнителю поручай загрузить указанный навык и выполнить одну операцию.
 
